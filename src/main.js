@@ -12,6 +12,11 @@ const DETAIL_ANCHOR_SEL = 'a[href*="tx_biohandel_plg"][href*="%5Bbetrieb%5D"], a
 function norm(s) { return (s || '').replace(/[\s\u00A0]+/g, ' ').trim(); }
 function sha1(s) { return (crypto.createHash('sha1').update(String(s)).digest('hex')); }
 
+function sanitizeKvKey(k) {
+  // Apify erlaubt nur: a-zA-Z0-9!-_.'()
+  return String(k).replace(/[^a-zA-Z0-9!\-_\.'\(\)]/g, '_').slice(0, 250);
+}
+
 function e164DE(phone) {
   if (!phone) return null;
   let s = String(phone).trim().replace(/^tel:/i, '');
@@ -235,10 +240,10 @@ function buildRecord(href, data) {
 
 await Actor.main(async () => {
   const input = await Actor.getInput() || {};
-  const { radiusKm = 25, useKvPlz = false, maxCities = 9999, stateKey = 'state.json', seenPrefix = 'seen:' } = input;
+  const { radiusKm = 25, useKvPlz = false, maxCities = 9999, stateKey = 'state.json', seenPrefix = 'seen_' } = input;
 
   log.setLevel(log.LEVELS.INFO);
-  log.info('Bioladen.de – Großstadt-PLZ (v6.2) startet…');
+  log.info('Bioladen.de – Großstadt-PLZ (v6.3) startet…');
 
   const store = await KeyValueStore.open();
   let state = (await store.getValue(stateKey)) || { plzIndex: 0, saved: 0 };
@@ -283,7 +288,8 @@ await Actor.main(async () => {
 
       let saved = 0;
       for (const href of links) {
-        const key = seenPrefix + sha1(href.toLowerCase());
+        const keyRaw = `${seenPrefix}${sha1(href.toLowerCase())}`;
+        const key = sanitizeKvKey(keyRaw);
         const already = await store.getValue(key);
         if (already) continue;
 
@@ -294,7 +300,8 @@ await Actor.main(async () => {
           const data = await extractDetailsFrom(p);
           const rec = buildRecord(href, data);
           await Dataset.pushData(rec);
-          await store.setValue(key, true);
+          // setValue in try/catch, um Push nicht rückwirkend zu "verlieren"
+          try { await store.setValue(key, true); } catch (kvErr) { log.warning(`KV setValue Warnung: ${kvErr.message}`); }
           saved++; state.saved++;
         } catch (e) {
           log.warning(`Fehler beim Laden: ${href} – ${e.message}`);
