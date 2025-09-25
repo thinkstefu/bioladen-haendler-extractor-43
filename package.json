@@ -1,8 +1,8 @@
 {
-  "name": "bioladen-city-plz-actor-v6",
-  "version": "1.0.0",
+  "name": "bioladen-city-plz-actor-v6-2",
+  "version": "1.0.2",
   "type": "module",
-  "description": "Sequenzieller Playwright Actor für bioladen.de – migrationssicher, dedupliziert und präzise Parsing-Strategie.",
+  "description": "Sequenzieller Playwright Actor – migrationssicher, dedupliziert; URL-Checks ohne Regex.",
   "main": "src/main.js",
   "scripts": {
     "start": "node src/main.js"

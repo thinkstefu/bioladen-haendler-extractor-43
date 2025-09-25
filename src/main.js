@@ -26,6 +26,12 @@ function e164DE(phone) {
   return keep;
 }
 
+function isHttpUrl(u) {
+  if (!u) return false;
+  const s = String(u).trim().toLowerCase();
+  return s.startsWith('http://') || s.startsWith('https://');
+}
+
 async function loadPlzList(useKvPlz, maxCities) {
   if (useKvPlz) {
     try {
@@ -147,7 +153,7 @@ async function collectDetailLinks(page) {
 
 async function extractDetailsFrom(page) {
   const data = await page.evaluate(() => {
-    const norm = (s) => (s || '').replace(/[\\s\\u00A0]+/g, ' ').trim();
+    const norm = (s) => (s || '').replace(/[\s\u00A0]+/g, ' ').trim();
 
     let phone = null;
     const telEl = document.querySelector('a[href^="tel:"]');
@@ -163,7 +169,7 @@ async function extractDetailsFrom(page) {
       try {
         const host = (new URL(href)).hostname.toLowerCase();
         if (host.includes('bioladen.de')) return false;
-        if (/(facebook|instagram|youtube|x\\.com|twitter)\\.com/.test(host)) return false;
+        if (/(facebook|instagram|youtube|x\.com|twitter)\.com/.test(host)) return false;
         return true;
       } catch (e) { return false; }
     });
@@ -172,7 +178,7 @@ async function extractDetailsFrom(page) {
     let addr = '';
     const addrCand = Array.from(document.querySelectorAll('address, .address, .addr, .contact, p'))
       .map(e => norm(e.textContent)).filter(Boolean);
-    addr = addrCand.find(x => /\\b\\d{5}\\b/.test(x)) || addrCand[0] || '';
+    addr = addrCand.find(x => /\b\d{5}\b/.test(x)) || addrCand[0] || '';
 
     const titleEl = document.querySelector('h1, h2, .title, .headline');
     const name = norm(titleEl ? titleEl.textContent : '');
@@ -183,24 +189,29 @@ async function extractDetailsFrom(page) {
     else if (/liefer/i.test(txt)) category = 'Lieferservice';
     else if (/bioladen|markt/i.test(txt)) category = 'Bioladen';
 
-    const openingMatch = txt.match(/(Mo|Di|Mi|Do|Fr|Sa|So)[^\\n]{0,80}\\d{1,2}[:\\.]\\d{2}/i);
+    const openingMatch = txt.match(/(Mo|Di|Mi|Do|Fr|Sa|So)[^\n]{0,80}\d{1,2}[:\.]\d{2}/i);
     const opening = openingMatch ? openingMatch[0] : null;
 
     return { name, addr, email, phone, website, category, opening };
   });
+
   const phone = e164DE(data.phone);
-  const email = (data.email && /\\S+@\\S+\\.\\S+/.test(data.email)) ? data.email.trim() : null;
-  const website = (data.website && /^https?:\\/\\//i.test(data.website)) ? data.website.trim() : null;
+  const email = (data.email && /\S+@\S+\.\S+/.test(data.email)) ? data.email.trim() : null;
+  let website = data.website ? data.website.trim() : null;
+  if (website) {
+    const lw = website.toLowerCase();
+    if (!(lw.startsWith('http://') || lw.startsWith('https://'))) website = null;
+  }
   return { ...data, phone, email, website };
 }
 
 function parseAddress(text) {
-  const parts = (text || '').split(/\\n|·|\\|/).map(norm).filter(Boolean);
+  const parts = (text || '').split(/\n|·|\|/).map(norm).filter(Boolean);
   let street = null, zip = null, city = null;
   for (const seg of parts) {
-    const m = seg.match(/(\\d{5})\\s+(.+)/);
+    const m = seg.match(/(\d{5})\s+(.+)/);
     if (m) { zip = zip || m[1]; city = city || m[2]; }
-    else if (!street && /\\d/.test(seg)) { street = seg; }
+    else if (!street && /\d/.test(seg)) { street = seg; }
   }
   return { street, zip, city };
 }
@@ -227,7 +238,7 @@ await Actor.main(async () => {
   const { radiusKm = 25, useKvPlz = false, maxCities = 9999, stateKey = 'state.json', seenPrefix = 'seen:' } = input;
 
   log.setLevel(log.LEVELS.INFO);
-  log.info('Bioladen.de – Großstadt-PLZ (v6) startet…');
+  log.info('Bioladen.de – Großstadt-PLZ (v6.2) startet…');
 
   const store = await KeyValueStore.open();
   let state = (await store.getValue(stateKey)) || { plzIndex: 0, saved: 0 };
